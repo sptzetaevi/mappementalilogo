@@ -262,7 +262,7 @@
     <button class="btn tiny" id="btnZoomOut">-</button>
 
     <span class="hint">
-      Doppio click = crea • Trascina = sposta • <kbd>L</kbd>/Collega = collega • click linea = seleziona • <kbd>CANC</kbd>/Elimina = elimina • <kbd>ESC</kbd> = annulla
+      Doppio click = crea • Trascina = sposta • click linea = seleziona • <kbd>CANC</kbd>/Elimina = elimina • <kbd>ESC</kbd> = annulla
     </span>
 
     <!-- CONTROLLI TESTO POP SELEZIONATO -->
@@ -324,7 +324,7 @@
   function boardRect(){ return board.getBoundingClientRect(); }
 
   var pops = [];   // {id,x,y,text,color,size,bold}
-  var links = [];  // {id,from,to,end,shape,color}
+  var links = [];  // {id,from,to,end,shape}
   var selectedBoxId = null;
   var selectedLinkId = null;
   var linkingFrom = null;
@@ -680,10 +680,7 @@
       if (links[i].from === from && links[i].to === to) return;
     }
     var p = preset || linkPreset || { end:"arrow", shape:"straight" };
-    var color = "#000000";
-    var fromPop = pops.find(function(pp){ return pp.id === from; });
-    if (fromPop && fromPop.color) color = fromPop.color;
-    links.push({ id: uid(), from: from, to: to, end: p.end, shape: p.shape, color: color });
+    links.push({ id: uid(), from: from, to: to, end: p.end, shape: p.shape });
   }
 
   function deleteSelected() {
@@ -731,7 +728,7 @@
   }
 
   function renderLinks() {
-    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    while (svg.firstChild) svg.firstChild.remove();
 
     var NS = "http://www.w3.org/2000/svg";
     var defs = document.createElementNS(NS, "defs");
@@ -765,7 +762,10 @@
 
       var end = l.end || "arrow";
       var shape = l.shape || "straight";
-      var color = l.color || "#000000";
+
+      var color = "#000000";
+      var toPop = pops.find(function(pp){ return pp.id === l.to; });
+      if (toPop && toPop.color) color = toPop.color;
 
       var elWire;
 
@@ -834,7 +834,6 @@
       el.style.left = p.x + "px";
       el.style.top  = p.y + "px";
 
-      // bordo coordinato al colore del testo
       el.style.borderColor = p.color || "#000000";
 
       el.innerHTML = '<textarea class="body" spellcheck="false"></textarea>';
@@ -919,7 +918,7 @@
   }
 
   function getState() {
-    return { version: 2, createdAt: new Date().toISOString(), pops: pops, links: links };
+    return { version: 3, createdAt: new Date().toISOString(), pops: pops, links: links };
   }
 
   function downloadBlob(name, blob) {
@@ -986,11 +985,6 @@
     pops = state.pops;
     links = state.links;
 
-    // compatibilità vecchie mappe: assicura un colore per ogni link
-    links.forEach(function(l){
-      if (!l.color) l.color = "#000000";
-    });
-
     clearSelections();
     setLinkMode(false);
     render();
@@ -1042,7 +1036,6 @@
       var inEditor = active && active.tagName === "TEXTAREA";
       if (!inEditor) { e.preventDefault(); deleteSelected(); }
     }
-    if (key === "l") { linkingFrom ? setLinkMode(false) : setLinkMode(true); }
     if (key === "escape") setLinkMode(false);
   });
 
@@ -1074,12 +1067,6 @@
     var boxEl = document.querySelector('.pop[data-id="'+p.id+'"]');
     if (boxEl) boxEl.style.borderColor = p.color;
 
-    // aggiorna colore frecce collegate a questo box
-    links.forEach(function(l){
-      if (l.from === p.id || l.to === p.id) {
-        l.color = p.color;
-      }
-    });
     renderLinks();
   });
 
