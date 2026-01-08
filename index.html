@@ -1,0 +1,1137 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>mappificio</title>
+  <style>
+    :root { --bg:#f6f7fb; --grid:rgba(0,0,0,.06); --ink:#1a1a1a; }
+
+    html, body { height:100%; margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; color:var(--ink); }
+    #app { height:100%; display:grid; grid-template-rows:auto 1fr; }
+
+    header{
+      display:flex; gap:10px; flex-wrap:wrap; align-items:center; padding:10px 12px;
+      background:#fff; border-bottom:1px solid rgba(0,0,0,.08);
+      position:sticky; top:0; z-index:10;
+    }
+    .btn{
+      border:1px solid rgba(0,0,0,.18);
+      background:#fff;
+      border-radius:10px;
+      padding:7px 10px;
+      cursor:pointer;
+      font-size:13px;
+      user-select:none;
+      white-space:nowrap;
+    }
+    .btn:hover{ background:#f7f7f7; }
+    .btn.active{
+      border-color: rgba(0,120,255,.55);
+      box-shadow: 0 0 0 3px rgba(0,120,255,.18);
+    }
+    .btn.danger{ border-color: rgba(200,0,0,.28); }
+    .btn.danger:hover{ background: rgba(200,0,0,.06); }
+
+    .hint{ font-size:13px; opacity:.75; flex: 1 1 320px; }
+    kbd{
+      font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+      font-size:12px; border:1px solid rgba(0,0,0,.2); border-bottom-width:2px;
+      padding:1px 6px; border-radius:6px; background:#fafafa;
+    }
+    .status{ font-size:13px; opacity:.9; white-space:nowrap; }
+
+    /* controlli testo pop */
+    .textControls{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      font-size:13px;
+      white-space:nowrap;
+    }
+    .textControls input[type="color"]{
+      width:26px;
+      height:26px;
+      padding:0;
+      border-radius:6px;
+      border:1px solid rgba(0,0,0,.18);
+      background:#fff;
+      cursor:pointer;
+    }
+    .btn.tiny{
+      padding:4px 7px;
+      font-size:12px;
+      border-radius:8px;
+    }
+    .btn.tiny.active{
+      border-color: rgba(0,120,255,.7);
+      box-shadow:0 0 0 2px rgba(0,120,255,.22);
+    }
+
+    #board{
+      position:relative; overflow:hidden;
+      touch-action: none;
+      background:
+        linear-gradient(var(--bg), var(--bg)),
+        repeating-linear-gradient(0deg, transparent, transparent 23px, var(--grid) 24px),
+        repeating-linear-gradient(90deg, transparent, transparent 23px, var(--grid) 24px);
+    }
+    #viewport{
+      position:absolute;
+      left:0; top:0;
+      width:8000px;
+      height:8000px;
+      transform-origin: 0 0;
+    }
+
+    #world{
+      position:absolute;
+      left:0;
+      top:0;
+      width:100%;
+      height:100%;
+      /* lascia passare i click verso lo SVG, ma consenti ai pop di riceverli */
+      pointer-events:none;
+    }
+
+    /* SVG: non blocca click su box */
+    svg{
+      position:absolute; inset:0;
+      width:100%;
+      height:100%;
+      overflow:visible;
+      pointer-events:auto; /* così le linee possono anche essere cliccate */
+    }
+
+    .pop{
+      position:absolute;
+      width:20ch;
+      max-width:48ch;
+      background:#fff;
+      border:1px solid rgba(0,0,0,.55);
+      border-radius:14px;
+      box-shadow:0 8px 24px rgba(0,0,0,.10);
+      padding:10px;
+      box-sizing:border-box;
+      user-select:none;
+      cursor:grab;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      touch-action: none;
+      pointer-events:auto; /* <- aggiungi questa */
+    }
+    .pop:active{ cursor:grabbing; }
+    .pop.selected{ outline:3px solid rgba(0,120,255,.25); }
+    .pop.linking{ background:rgba(0,120,255,.08)!important; border-color:rgba(0,120,255,.35)!important; }
+
+    .body{
+      width:100%;
+      border:0;
+      outline:0;
+      resize:none;
+      overflow:hidden;
+      background:transparent;
+      color:inherit;
+      font-size:14px;
+      line-height:1.25;
+      padding:0;
+      margin:0;
+      box-sizing:border-box;
+      min-height:1.25em;
+      white-space:pre-wrap;
+      word-break:break-word;
+      text-align:center;
+    }
+
+    .linkLine{
+      pointer-events:stroke;
+      fill: none;
+      cursor:pointer;
+      stroke: rgba(0,0,0,.55);
+      stroke-width: 2;
+      stroke-linecap: round;
+    }
+    .linkLine.selected{
+      stroke: rgba(0,120,255,.85);
+      stroke-width: 3;
+    }
+
+    .ghost{
+      position:absolute; inset:0; pointer-events:none;
+      display:flex; align-items:center; justify-content:center;
+      font-size:14px; opacity:.55;
+    }
+
+    @media print {
+      header { display:none !important; }
+      .ghost { display:none !important; }
+
+      /* Mantieni un'altezza reale al layout in stampa */
+      html, body { height: 100% !important; }
+      #app { height: 100% !important; }
+
+      /* Il board deve avere dimensioni stampabili */
+      #board {
+        background:#fff !important;
+        overflow: visible !important;
+        height: 100vh !important;   /* <-- CHIAVE: altrimenti svg=0 */
+      }
+
+      /* SVG deve occupare tutto il board in stampa */
+      #wires {
+        width: 100% !important;
+        height: 100% !important;
+      }
+
+      svg {
+        overflow: visible !important;
+      }
+    }
+
+    #mapTitle {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      user-select: none;
+      margin-left:auto;
+    }
+
+    /* --- LOGO/LINK ALLA HOME ANTIMAPPIFICIO --- */
+    .homeLogo{
+      margin-left: 10px;
+      text-decoration: none;
+    }
+    .homeLogo .logoLetters{
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      border: 2px solid rgba(0,0,0,.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: 2px;
+      color: var(--ink);
+      background: #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,.12);
+      transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+    }
+    .homeLogo:hover .logoLetters{
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(0,0,0,.16);
+      border-color: rgba(0,120,255,.6);
+    }
+
+    /* --- POPUP OPZIONI COLLEGAMENTO --- */
+    .modalOverlay{
+      position:fixed; inset:0;
+      background:rgba(0,0,0,.35);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:9999;
+    }
+    .modal{
+      width:min(420px, 92vw);
+      background:#fff;
+      border:1px solid rgba(0,0,0,.25);
+      border-radius:16px;
+      box-shadow:0 16px 50px rgba(0,0,0,.20);
+      padding:14px;
+    }
+    .modal h3{ margin:0 0 10px 0; font-size:16px; }
+    .modal .row{ display:flex; gap:12px; flex-wrap:wrap; margin:10px 0; }
+    .modal label{ display:flex; gap:8px; align-items:center; font-size:14px; cursor:pointer; }
+    .modal .actions{ display:flex; gap:10px; justify-content:flex-end; margin-top:12px; }
+    
+  </style>
+</head>
+
+<body>
+<div id="app">
+    
+  <header>
+    <button class="btn" id="btnNew">+ Nuovo pop</button>
+    <button class="btn" id="btnMove">Sposta</button>
+    <button class="btn" id="btnLink">Collega</button>
+    <button class="btn danger" id="btnDelete">Elimina</button>
+
+    <button class="btn" id="btnPdf">Esporta PDF</button>
+    <button class="btn" id="btnExportJson">Esporta JSON</button>
+    <button class="btn" id="btnExportHtml">Esporta HTML</button>
+    <button class="btn" id="btnImport">Importa</button>
+    <input id="fileInput" type="file" accept=".json,.html" style="display:none" />
+
+    <button class="btn tiny" id="btnZoomIn">+</button>
+    <button class="btn tiny" id="btnZoomOut">-</button>
+
+    <span class="hint">
+      Doppio click = crea • Trascina = sposta • <kbd>L</kbd>/Collega = collega • click linea = seleziona • <kbd>CANC</kbd>/Elimina = elimina • <kbd>ESC</kbd> = annulla
+    </span>
+
+    <!-- CONTROLLI TESTO POP SELEZIONATO -->
+    <div class="textControls">
+      <span>Testo:</span>
+      <input type="color" id="txtColor" value="#000000" disabled>
+      <button class="btn tiny" id="btnSizeSmall" disabled>A-</button>
+      <button class="btn tiny" id="btnSizeLarge" disabled>A+</button>
+      <button class="btn tiny" id="btnBold" disabled><b>B</b></button>
+    </div>
+
+    <span class="status" id="status">Avvio...</span>
+    <span id="mapTitle">MAPPA MENTALE</span>
+
+    <!-- LOGO/LINK ALLA PAGINA PRINCIPALE ANTIMAPPIFICIO -->
+    <a class="homeLogo"
+       href="https://sptzetaevi.github.io/antimappificio/"
+       title="Torna alla pagina principale ANTIMAPPIFICIO">
+      <span class="logoLetters">A&nbsp;M</span>
+    </a>
+  </header>
+
+  <div id="board">
+    <div id="viewport">
+      <svg id="wires"></svg>
+      <div id="world"></div>
+    </div>
+
+    <div class="ghost">Doppio click sullo sfondo per creare un pop</div>
+  </div>
+
+<script>
+(function () {
+  // ---------- elementi ----------
+  var board = document.getElementById("board");
+  var svg = document.getElementById("wires");
+  var viewport = document.getElementById("viewport");
+  var world = document.getElementById("world");
+  var statusEl = document.getElementById("status");
+
+  var btnNew = document.getElementById("btnNew");
+  var btnLink = document.getElementById("btnLink");
+  var btnDelete = document.getElementById("btnDelete");
+  var btnPdf = document.getElementById("btnPdf");
+  var btnExportJson = document.getElementById("btnExportJson");
+  var btnExportHtml = document.getElementById("btnExportHtml");
+  var btnImport = document.getElementById("btnImport");
+  var btnMove = document.getElementById("btnMove");
+  var fileInput = document.getElementById("fileInput");
+  var btnZoomIn = document.getElementById("btnZoomIn");
+  var btnZoomOut = document.getElementById("btnZoomOut");
+
+  // nuovi controlli testo
+  var txtColor = document.getElementById("txtColor");
+  var btnSizeSmall = document.getElementById("btnSizeSmall");
+  var btnSizeLarge = document.getElementById("btnSizeLarge");
+  var btnBold = document.getElementById("btnBold");
+
+  function setStatus(msg){ statusEl.textContent = msg; }
+  function uid(){ return Math.random().toString(36).slice(2, 10); }
+  function boardRect(){ return board.getBoundingClientRect(); }
+
+  // ---------- stato ----------
+  var pops = [];   // {id,x,y,text,color,size,bold}
+  var links = [];  // {id,from,to,end:"arrow|none",shape:"straight|curve"}
+  var selectedBoxId = null;
+  var selectedLinkId = null;
+  var linkingFrom = null;
+  var moveMode = false;
+
+  // ---------- PAN + ZOOM (mobile + desktop) ----------
+  var view = { x: 0, y: 0, s: 1 };
+
+  function clampScale(s){
+    return Math.max(0.35, Math.min(2.8, s));
+  }
+
+  function applyView(){
+    viewport.style.transform = "translate(" + view.x + "px," + view.y + "px) scale(" + view.s + ")";
+  }
+
+  function screenToWorld(clientX, clientY){
+    var br = board.getBoundingClientRect();
+    var sx = clientX - br.left;
+    var sy = clientY - br.top;
+    return { x: (sx - view.x)/view.s, y: (sy - view.y)/view.s };
+  }
+
+  applyView();
+
+  // Pointer tracking
+  var pointers = new Map();
+  var panState = null;
+  var pinchState = null;
+
+  function dist(a,b){
+    var dx=a.x-b.x, dy=a.y-b.y;
+    return Math.hypot(dx,dy);
+  }
+
+  board.addEventListener("pointerdown", function(e){
+    // se tocchi un box, lascia gestire il drag del box (che fa stopPropagation)
+    if (e.target.closest(".pop")) return;
+
+    board.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+
+    if (pointers.size === 1){
+      panState = { startX:view.x, startY:view.y, p0:{x:e.clientX,y:e.clientY} };
+      pinchState = null;
+    }
+
+    if (pointers.size === 2){
+      var arr = Array.from(pointers.values());
+      var pA = arr[0], pB = arr[1];
+      var mid = { x:(pA.x+pB.x)/2, y:(pA.y+pB.y)/2 };
+      var wMid = screenToWorld(mid.x, mid.y);
+
+      pinchState = {
+        startS: view.s,
+        startD: dist(pA,pB),
+        midScreen: mid,
+        midWorld: wMid
+      };
+      panState = null;
+    }
+  });
+
+  board.addEventListener("pointermove", function(e){
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+
+    // pinch
+    if (pinchState && pointers.size >= 2){
+      var arr = Array.from(pointers.values());
+      var pA = arr[0], pB = arr[1];
+      var d = dist(pA,pB);
+      view.s = clampScale(pinchState.startS * (d / pinchState.startD));
+
+      // mantieni fisso il punto sotto alle dita
+      var br = board.getBoundingClientRect();
+      var midSx = pinchState.midScreen.x - br.left;
+      var midSy = pinchState.midScreen.y - br.top;
+
+      view.x = midSx - pinchState.midWorld.x * view.s;
+      view.y = midSy - pinchState.midWorld.y * view.s;
+
+      applyView();
+      renderLinks();
+      return;
+    }
+
+    // pan
+    if (panState && pointers.size === 1){
+      view.x = panState.startX + (e.clientX - panState.p0.x);
+      view.y = panState.startY + (e.clientY - panState.p0.y);
+      applyView();
+      renderLinks();
+    }
+  });
+
+  board.addEventListener("pointerup", function(e){
+    pointers.delete(e.pointerId);
+    if (pointers.size === 0){
+      panState = null;
+      pinchState = null;
+    }
+  });
+
+  board.addEventListener("pointercancel", function(){
+    pointers.clear();
+    panState = null;
+    pinchState = null;
+  });
+
+  // zoom con CTRL + rotellina (desktop)
+  board.addEventListener("wheel", function(e){
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+
+    var before = screenToWorld(e.clientX, e.clientY);
+    var factor = (e.deltaY < 0) ? 1.08 : 0.92;
+    view.s = clampScale(view.s * factor);
+
+    var br = board.getBoundingClientRect();
+    var sx = e.clientX - br.left;
+    var sy = e.clientY - br.top;
+
+    view.x = sx - before.x * view.s;
+    view.y = sy - before.y * view.s;
+
+    applyView();
+    renderLinks();
+  }, { passive:false });
+
+
+  function zoomAroundCenter(factor){
+    var br = board.getBoundingClientRect();
+    var cx = br.left + br.width/2;
+    var cy = br.top + br.height/2;
+    var before = screenToWorld(cx, cy);
+
+    view.s = clampScale(view.s * factor);
+
+    var sx = cx - br.left;
+    var sy = cy - br.top;
+
+    view.x = sx - before.x * view.s;
+    view.y = sy - before.y * view.s;
+
+    applyView();
+    renderLinks();
+  }
+
+  // --- opzioni collegamento (scelte al momento dell'attivazione di "Collega") ---
+  var linkPreset = { end: "arrow", shape: "straight" }; // default
+  var linkModal = null;
+
+  function ensureLinkModal() {
+    if (linkModal) return;
+
+    linkModal = document.createElement("div");
+    linkModal.className = "modalOverlay";
+    linkModal.innerHTML =
+      '<div class="modal" role="dialog" aria-modal="true">' +
+        '<h3>Opzioni collegamento</h3>' +
+
+        '<div class="row">' +
+          '<label><input type="radio" name="linkEnd" value="none"> Linea semplice</label>' +
+          '<label><input type="radio" name="linkEnd" value="arrow"> Freccia</label>' +
+        '</div>' +
+
+        '<div class="row">' +
+          '<label><input type="radio" name="linkShape" value="straight"> Retta</label>' +
+          '<label><input type="radio" name="linkShape" value="curve"> Curva</label>' +
+        '</div>' +
+
+        '<div class="actions">' +
+          '<button class="btn" id="linkOptCancel">Annulla</button>' +
+          '<button class="btn" id="linkOptOk">OK</button>' +
+        '</div>' +
+      '</div>';
+
+    document.body.appendChild(linkModal);
+  }
+
+  function openLinkOptions(done) {
+    ensureLinkModal();
+
+    // pre-seleziona valori correnti
+    var endRadio = linkModal.querySelector('input[name="linkEnd"][value="' + linkPreset.end + '"]');
+    var shapeRadio = linkModal.querySelector('input[name="linkShape"][value="' + linkPreset.shape + '"]');
+    if (endRadio) endRadio.checked = true;
+    if (shapeRadio) shapeRadio.checked = true;
+
+    linkModal.style.display = "flex";
+
+    function close() {
+      linkModal.style.display = "none";
+      okBtn.onclick = null;
+      cancelBtn.onclick = null;
+      linkModal.onclick = null;
+    }
+
+    var okBtn = linkModal.querySelector("#linkOptOk");
+    var cancelBtn = linkModal.querySelector("#linkOptCancel");
+
+    okBtn.onclick = function () {
+      var endVal = (linkModal.querySelector('input[name="linkEnd"]:checked') || {}).value || "arrow";
+      var shapeVal = (linkModal.querySelector('input[name="linkShape"]:checked') || {}).value || "straight";
+      linkPreset = { end: endVal, shape: shapeVal };
+      close();
+      done(true);
+    };
+
+    cancelBtn.onclick = function () {
+      close();
+      done(false);
+    };
+
+    // click fuori dal box = annulla
+    linkModal.onclick = function (e) {
+      if (e.target === linkModal) {
+        close();
+        done(false);
+      }
+    };
+  }
+
+  function clampToBoard(x, y) {
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    return { x:x, y:y };
+  }
+
+  function disableTextControls() {
+    txtColor.disabled = true;
+    btnSizeSmall.disabled = true;
+    btnSizeLarge.disabled = true;
+    btnBold.disabled = true;
+
+    btnSizeSmall.classList.remove("active");
+    btnSizeLarge.classList.remove("active");
+    btnBold.classList.remove("active");
+  }
+
+  function enableTextControlsForPop(p) {
+    txtColor.disabled = false;
+    btnSizeSmall.disabled = false;
+    btnSizeLarge.disabled = false;
+    btnBold.disabled = false;
+
+    // default se mancano (vecchie mappe)
+    if (!p.color) p.color = "#000000";
+    if (!p.size) p.size = "small";
+    if (typeof p.bold === "undefined") p.bold = false;
+
+    txtColor.value = p.color;
+
+    btnSizeSmall.classList.toggle("active", p.size === "small");
+    btnSizeLarge.classList.toggle("active", p.size === "large");
+    btnBold.classList.toggle("active", !!p.bold);
+  }
+
+  function updateTextControls() {
+    if (!selectedBoxId) {
+      disableTextControls();
+      return;
+    }
+    var p = pops.find(function(pp){ return pp.id === selectedBoxId; });
+    if (!p) {
+      disableTextControls();
+      return;
+    }
+    enableTextControlsForPop(p);
+  }
+
+  function clearSelections() {
+    selectedBoxId = null;
+    selectedLinkId = null;
+    var a = document.querySelectorAll(".pop");
+    for (var i=0;i<a.length;i++) a[i].classList.remove("selected");
+    var b = document.querySelectorAll(".linkLine");
+    for (var j=0;j<b.length;j++) b[j].classList.remove("selected");
+    updateTextControls();
+  }
+
+  function selectBox(id) {
+    selectedBoxId = id;
+    selectedLinkId = null;
+    var a = document.querySelectorAll(".pop");
+    for (var i=0;i<a.length;i++) {
+      a[i].classList.toggle("selected", a[i].dataset.id === id);
+    }
+    var b = document.querySelectorAll(".linkLine");
+    for (var j=0;j<b.length;j++) b[j].classList.remove("selected");
+    updateTextControls();
+  }
+
+  function selectLink(id) {
+    selectedLinkId = id;
+    selectedBoxId = null;
+    var a = document.querySelectorAll(".linkLine");
+    for (var i=0;i<a.length;i++) {
+      a[i].classList.toggle("selected", a[i].dataset.linkid === id);
+    }
+    var b = document.querySelectorAll(".pop");
+    for (var j=0;j<b.length;j++) b[j].classList.remove("selected");
+    updateTextControls();
+  }
+
+  function setLinkMode(on) {
+    if (on) {
+      if (moveMode) setMoveMode(false);
+      if (!selectedBoxId) { setStatus("Seleziona un box prima di collegare."); return; }
+
+      // popup opzioni (freccia/linea, retta/curva)
+      openLinkOptions(function (ok) {
+        if (!ok) { setStatus("Collegamento annullato."); return; }
+
+        linkingFrom = selectedBoxId;
+        btnLink.classList.add("active");
+        var a = document.querySelectorAll(".pop");
+        for (var i=0;i<a.length;i++) {
+          a[i].classList.toggle("linking", a[i].dataset.id === linkingFrom);
+        }
+        setStatus("Modalita collega: clicca un altro box.");
+      });
+
+      return;
+    } else {
+      linkingFrom = null;
+      btnLink.classList.remove("active");
+      var b = document.querySelectorAll(".pop");
+      for (var j=0;j<b.length;j++) b[j].classList.remove("linking");
+      setStatus("Pronto");
+    }
+  }
+      
+  function setMoveMode(on) {
+    moveMode = !!on;
+
+    if (moveMode) {
+      // se attivo sposta: disattivo collega
+      setLinkMode(false);
+      btnMove.classList.add("active");
+      setStatus("Modalita sposta: trascina i box.");
+    } else {
+      btnMove.classList.remove("active");
+      setStatus("Pronto");
+    }
+
+    // quando sposta è attivo, blocchiamo l'editing del testo
+    var tas = document.querySelectorAll(".pop .body");
+    for (var i = 0; i < tas.length; i++) {
+      tas[i].readOnly = moveMode;
+    }
+  }
+  
+  function autoGrow(ta) {
+    ta.style.height = "auto";
+    ta.style.height = ta.scrollHeight + "px";
+  }
+
+  function createPop(x, y) {
+    var p = { id: uid(), x: x, y: y, text: "", color:"#000000", size:"small", bold:false };
+    pops.push(p);
+    render();
+    selectBox(p.id);
+  }
+
+  function addLink(from, to, preset) {
+    if (!from || !to || from === to) return;
+    for (var i=0;i<links.length;i++) {
+      if (links[i].from === from && links[i].to === to) return;
+    }
+    var p = preset || linkPreset || { end:"arrow", shape:"straight" };
+    links.push({ id: uid(), from: from, to: to, end: p.end, shape: p.shape });
+  }
+
+  function deleteSelected() {
+    if (selectedLinkId) {
+      links = links.filter(function (l) { return l.id !== selectedLinkId; });
+      selectedLinkId = null;
+      renderLinks();
+      setStatus("Collegamento eliminato.");
+      return;
+    }
+    if (selectedBoxId) {
+      var id = selectedBoxId;
+      pops = pops.filter(function (p) { return p.id !== id; });
+      links = links.filter(function (l) { return l.from !== id && l.to !== id; });
+      selectedBoxId = null;
+      if (linkingFrom === id) setLinkMode(false);
+      render();
+      setStatus("Box eliminato.");
+      return;
+    }
+    setStatus("Nessuna selezione.");
+  }
+
+  function getPopBoxInBoardCoords(id) {
+    var el = document.querySelector('.pop[data-id="'+id+'"]');
+    if (!el) return null;
+
+    // offsetLeft/Top sono in coordinate "mondo" (NON influenzate da transform)
+    var x = el.offsetLeft;
+    var y = el.offsetTop;
+    var w = el.offsetWidth;
+    var h = el.offsetHeight;
+
+    return {
+      cx: x + w/2, cy: y + h/2,
+      hw: w/2, hh: h/2
+    };
+  }
+
+  function edgePoint(cx, cy, hw, hh, dx, dy) {
+    if (dx === 0 && dy === 0) return { x: cx, y: cy };
+    var tx = Math.abs(dx) / hw;
+    var ty = Math.abs(dy) / hh;
+    var t = 1 / Math.max(tx, ty);
+    return { x: cx + dx * t, y: cy + dy * t };
+  }
+
+  function renderLinks() {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    var NS = "http://www.w3.org/2000/svg";
+    var defs = document.createElementNS(NS, "defs");
+    var marker = document.createElementNS(NS, "marker");
+    marker.setAttribute("id", "arrow");
+    marker.setAttribute("viewBox", "0 0 10 10");
+    marker.setAttribute("refX", "9");
+    marker.setAttribute("refY", "5");
+    marker.setAttribute("markerWidth", "7");
+    marker.setAttribute("markerHeight", "7");
+    marker.setAttribute("orient", "auto");
+    marker.setAttribute("markerUnits", "strokeWidth");
+
+    var path = document.createElementNS(NS, "path");
+    path.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
+    path.setAttribute("fill", "rgba(0,0,0,.55)");
+    marker.appendChild(path);
+    defs.appendChild(marker);
+    svg.appendChild(defs);
+
+    links.forEach(function (l) {
+      var A = getPopBoxInBoardCoords(l.from);
+      var B = getPopBoxInBoardCoords(l.to);
+      if (!A || !B) return;
+
+      var dx = B.cx - A.cx;
+      var dy = B.cy - A.cy;
+
+      var p1 = edgePoint(A.cx, A.cy, A.hw, A.hh, dx, dy);
+      var p2 = edgePoint(B.cx, B.cy, B.hw, B.hh, -dx, -dy);
+
+      var end = l.end || "arrow";       // compatibilità con vecchi file importati
+      var shape = l.shape || "straight";
+
+      var elWire;
+
+      if (shape === "curve") {
+        // curva: uso un path con Quadratic Bezier
+        var mx = (p1.x + p2.x) / 2;
+        var my = (p1.y + p2.y) / 2;
+
+        var len = Math.hypot(dx, dy) || 1;
+        var nx = -dy / len;   // normale (perpendicolare)
+        var ny =  dx / len;
+
+        var offset = Math.min(70, Math.max(20, len / 4));// “quanto” curva
+        var cx = mx + nx * offset;
+        var cy = my + ny * offset;
+
+        elWire = document.createElementNS(NS, "path");
+        elWire.setAttribute("fill", "none");
+        elWire.setAttribute("d", "M " + p1.x + " " + p1.y + " Q " + cx + " " + cy + " " + p2.x + " " + p2.y);
+      } else {
+        // retta: line
+        elWire = document.createElementNS(NS, "line");
+        elWire.setAttribute("x1", p1.x);
+        elWire.setAttribute("y1", p1.y);
+        elWire.setAttribute("x2", p2.x);
+        elWire.setAttribute("y2", p2.y);
+      }
+
+      if (end === "arrow") {
+        elWire.setAttribute("marker-end", "url(#arrow)");
+      }
+
+      elWire.classList.add("linkLine");
+      elWire.dataset.linkid = l.id;
+
+      if (l.id === selectedLinkId) elWire.classList.add("selected");
+
+      function handleSelectLink(e){
+        e.stopPropagation();
+        setLinkMode(false);
+        selectLink(l.id);
+        setStatus("Link selezionato.");
+      }
+      elWire.addEventListener("pointerdown", handleSelectLink);
+      elWire.addEventListener("mousedown", handleSelectLink);
+      elWire.addEventListener("click", handleSelectLink);
+
+      svg.appendChild(elWire);
+    });
+  }
+
+  function render() {
+    var old = world.querySelectorAll(".pop");
+    for (var i=0;i<old.length;i++) old[i].remove();
+
+    var ghost = board.querySelector(".ghost");
+    if (ghost) ghost.style.display = pops.length ? "none" : "flex";
+
+    pops.forEach(function (p) {
+      // default per compatibilità vecchie mappe
+      if (!p.color) p.color = "#000000";
+      if (!p.size) p.size = "small";
+      if (typeof p.bold === "undefined") p.bold = false;
+
+      var el = document.createElement("div");
+      el.className = "pop";
+      el.dataset.id = p.id;
+      el.style.left = p.x + "px";
+      el.style.top  = p.y + "px";
+
+      el.innerHTML = '<textarea class="body" spellcheck="false"></textarea>';
+      var ta = el.querySelector(".body");
+      ta.value = p.text || "";
+
+      // applica stile testo
+      var fontSizePx = (p.size === "large") ? "20px" : "14px";
+      ta.style.fontSize = fontSizePx;
+      ta.style.fontWeight = p.bold ? "700" : "400";
+      ta.style.color = p.color || "#000000";
+
+      autoGrow(ta);
+
+      if (p.id === selectedBoxId) el.classList.add("selected");
+      if (p.id === linkingFrom) el.classList.add("linking");
+
+      ta.addEventListener("focus", function () { selectBox(p.id); });
+      ta.addEventListener("mousedown", function (e) {
+        selectBox(p.id);
+        if (linkingFrom && linkingFrom !== p.id) e.preventDefault();
+      });
+
+      ta.addEventListener("input", function (e) {
+        p.text = e.target.value;
+        autoGrow(ta);
+        renderLinks();
+      });
+
+      // click ovunque nel box: se in modalita collega, crea link
+      el.addEventListener("click", function () {
+        if (linkingFrom && linkingFrom !== p.id) {
+          addLink(linkingFrom, p.id, linkPreset);
+          setLinkMode(false);
+          renderLinks();
+          setStatus("Collegamento creato.");
+        }
+      });
+
+      // drag solo fuori textarea
+      var dragging = false, sx=0, sy=0, ox=0, oy=0;
+
+      el.addEventListener("pointerdown", function (e) {
+        // Su touch spesso e.button non è 0: quindi non blocchiamo
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+
+        // Se NON siamo in modalita sposta e sto toccando la textarea, non trascinare
+        if (!moveMode && e.target && e.target.tagName && e.target.tagName.toLowerCase() === "textarea") return;
+
+        e.preventDefault();     // evita scroll/zoom mentre trascini
+        e.stopPropagation();
+
+        setLinkMode(false);
+        selectBox(p.id);
+
+        dragging = true;
+        sx = e.clientX; sy = e.clientY;
+        ox = p.x; oy = p.y;
+
+        // cattura il puntatore: fondamentale su mobile
+        if (el.setPointerCapture) el.setPointerCapture(e.pointerId);
+
+        function onMove(ev) {
+          if (!dragging) return;
+          var dx = (ev.clientX - sx) / view.s;
+          var dy = (ev.clientY - sy) / view.s;
+          var pos = clampToBoard(ox + dx, oy + dy);
+          p.x = pos.x; p.y = pos.y;
+          el.style.left = p.x + "px";
+          el.style.top  = p.y + "px";
+          renderLinks();
+        }
+
+        function onUp(ev) {
+          dragging = false;
+          window.removeEventListener("pointermove", onMove);
+          window.removeEventListener("pointerup", onUp);
+        }
+
+        window.addEventListener("pointermove", onMove, { passive:false });
+        window.addEventListener("pointerup", onUp, { passive:true });
+      });
+
+      world.appendChild(el);
+    });
+
+    renderLinks();
+    updateTextControls();
+  }
+
+  // ---------- export/import/pdf ----------
+  function getState() {
+    return { version: 1, createdAt: new Date().toISOString(), pops: pops, links: links };
+  }
+
+  function downloadBlob(name, blob) {
+    var a = document.createElement("a");
+    var url = URL.createObjectURL(blob);
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  }
+
+  function exportJSON() {
+    var blob = new Blob([JSON.stringify(getState(), null, 2)], { type: "application/json;charset=utf-8" });
+    var name = "mappa_" + new Date().toISOString().slice(0,19).split(":").join("-") + ".json";
+    downloadBlob(name, blob);
+    setStatus("Esportato JSON.");
+  }
+
+  function exportHTML() {
+    var state = JSON.stringify(getState(), null, 2);
+
+    var html =
+      '<!doctype html>' +
+      '<html lang="it">' +
+      '<head>' +
+      '<meta charset="utf-8"/>' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1"/>' +
+      '<title>Mappa esportata</title>' +
+      '</head>' +
+      '<body>' +
+      '<h3>Mappa esportata</h3>' +
+      '<p>Importa questo file nell\'app con il pulsante Importa.</p>' +
+      '<textarea id="popplet_export_data" style="display:none;">' +
+      state +
+      '</textarea>' +
+      '</body>' +
+      '</html>';
+
+    var blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    var name = "mappa_" + new Date().toISOString().slice(0,19).replace(/:/g,'-') + ".html";
+    downloadBlob(name, blob);
+    setStatus("Esportato HTML.");
+  }
+  
+  function parseImportedText(text) {
+    var t = (text || "").trim();
+
+    // Caso 1: JSON puro
+    if (t.charAt(0) === "{" || t.charAt(0) === "[") {
+      return JSON.parse(t);
+    }
+
+    // Caso 2: HTML esportato (textarea nascosta)
+    var re = /<textarea[^>]*id=["']popplet_export_data["'][^>]*>([\s\S]*?)<\/textarea>/i;
+    var m = text.match(re);
+    if (!m) throw new Error("File non riconosciuto");
+
+    return JSON.parse(m[1]);
+  }
+
+  function applyState(state) {
+    if (!state || !state.pops || !state.links) throw new Error("Dati incompleti");
+    pops = state.pops;
+    links = state.links;
+    clearSelections();
+    setLinkMode(false);
+    render();
+    setStatus("Import OK.");
+  }
+
+  function doImport() {
+    fileInput.value = "";
+    fileInput.click();
+  }
+
+  fileInput.addEventListener("change", function (e) {
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+    file.text().then(function (text) {
+      var state = parseImportedText(text);
+      applyState(state);
+    }).catch(function (err) {
+      console.error(err);
+      setStatus("Errore import.");
+      alert("Import fallito: usa un file esportato da questa app (JSON o HTML).");
+    });
+  });
+
+  function exportPDF() {
+    setStatus("Stampa: scegli Salva come PDF.");
+    window.print();
+  }
+
+  // ---------- eventi ----------
+  board.addEventListener("mousedown", function (e) {
+    if (e.target === board) {
+      clearSelections();
+      setLinkMode(false);
+      setStatus("Pronto");
+    }
+  });
+
+  board.addEventListener("dblclick", function (e) {
+    if (e.target && e.target.closest && e.target.closest(".pop")) return;
+    var p = screenToWorld(e.clientX, e.clientY);
+    var pos = clampToBoard(p.x, p.y);
+    createPop(pos.x, pos.y);
+  });
+
+  window.addEventListener("keydown", function (e) {
+    var key = (e.key || "").toLowerCase();
+    if (key === "delete" || key === "backspace") {
+      var active = document.activeElement;
+      var inEditor = active && active.tagName === "TEXTAREA";
+      if (!inEditor) { e.preventDefault(); deleteSelected(); }
+    }
+    if (key === "l") { linkingFrom ? setLinkMode(false) : setLinkMode(true); }
+    if (key === "escape") setLinkMode(false);
+  });
+
+  // ---------- bottoni ----------
+  btnNew.addEventListener("click", function () {
+    var r = boardRect();
+    createPop(20 + Math.random()*(r.width-260), 20 + Math.random()*(r.height-160));
+  });
+  btnLink.addEventListener("click", function () { setLinkMode(!linkingFrom); });
+  btnDelete.addEventListener("click", deleteSelected);
+  btnMove.addEventListener("click", function () { setMoveMode(!moveMode); });
+
+  btnPdf.addEventListener("click", exportPDF);
+  btnExportJson.addEventListener("click", exportJSON);
+  btnExportHtml.addEventListener("click", exportHTML);
+  btnImport.addEventListener("click", doImport);
+  btnZoomIn.addEventListener("click", function(){ zoomAroundCenter(1.15); });
+  btnZoomOut.addEventListener("click", function(){ zoomAroundCenter(1/1.15); });
+
+  // ---------- eventi controlli testo ----------
+  txtColor.addEventListener("input", function(){
+    if (!selectedBoxId) return;
+    var p = pops.find(function(pp){ return pp.id === selectedBoxId; });
+    if (!p) return;
+    p.color = txtColor.value || "#000000";
+    var ta = document.querySelector('.pop[data-id="'+p.id+'"] .body');
+    if (ta) ta.style.color = p.color;
+  });
+
+  btnSizeSmall.addEventListener("click", function(){
+    if (!selectedBoxId) return;
+    var p = pops.find(function(pp){ return pp.id === selectedBoxId; });
+    if (!p) return;
+    p.size = "small";
+    var ta = document.querySelector('.pop[data-id="'+p.id+'"] .body');
+    if (ta) ta.style.fontSize = "14px";
+    updateTextControls();
+  });
+
+  btnSizeLarge.addEventListener("click", function(){
+    if (!selectedBoxId) return;
+    var p = pops.find(function(pp){ return pp.id === selectedBoxId; });
+    if (!p) return;
+    p.size = "large";
+    var ta = document.querySelector('.pop[data-id="'+p.id+'"] .body');
+    if (ta) ta.style.fontSize = "20px";
+    updateTextControls();
+  });
+
+  btnBold.addEventListener("click", function(){
+    if (!selectedBoxId) return;
+    var p = pops.find(function(pp){ return pp.id === selectedBoxId; });
+    if (!p) return;
+    p.bold = !p.bold;
+    var ta = document.querySelector('.pop[data-id="'+p.id+'"] .body');
+    if (ta) ta.style.fontWeight = p.bold ? "700" : "400";
+    updateTextControls();
+  });
+
+  // ---------- init ----------
+  render();
+  setStatus("Pronto");
+})();
+</script>
+</body>
+</html>
