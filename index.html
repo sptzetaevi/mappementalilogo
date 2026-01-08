@@ -90,17 +90,15 @@
       top:0;
       width:100%;
       height:100%;
-      /* lascia passare i click verso lo SVG, ma consenti ai pop di riceverli */
       pointer-events:none;
     }
 
-    /* SVG: non blocca click su box */
     svg{
       position:absolute; inset:0;
       width:100%;
       height:100%;
       overflow:visible;
-      pointer-events:auto; /* così le linee possono anche essere cliccate */
+      pointer-events:auto;
     }
 
     .pop{
@@ -119,7 +117,7 @@
       align-items:center;
       justify-content:center;
       touch-action: none;
-      pointer-events:auto; /* <- aggiungi questa */
+      pointer-events:auto;
     }
     .pop:active{ cursor:grabbing; }
     .pop.selected{ outline:3px solid rgba(0,120,255,.25); }
@@ -153,7 +151,6 @@
       stroke-linecap: round;
     }
     .linkLine.selected{
-      stroke: rgba(0,120,255,.85);
       stroke-width: 3;
     }
 
@@ -167,18 +164,15 @@
       header { display:none !important; }
       .ghost { display:none !important; }
 
-      /* Mantieni un'altezza reale al layout in stampa */
       html, body { height: 100% !important; }
       #app { height: 100% !important; }
 
-      /* Il board deve avere dimensioni stampabili */
       #board {
         background:#fff !important;
         overflow: visible !important;
-        height: 100vh !important;   /* <-- CHIAVE: altrimenti svg=0 */
+        height: 100vh !important;
       }
 
-      /* SVG deve occupare tutto il board in stampa */
       #wires {
         width: 100% !important;
         height: 100% !important;
@@ -302,7 +296,6 @@
 
 <script>
 (function () {
-  // ---------- elementi ----------
   var board = document.getElementById("board");
   var svg = document.getElementById("wires");
   var viewport = document.getElementById("viewport");
@@ -321,7 +314,6 @@
   var btnZoomIn = document.getElementById("btnZoomIn");
   var btnZoomOut = document.getElementById("btnZoomOut");
 
-  // nuovi controlli testo
   var txtColor = document.getElementById("txtColor");
   var btnSizeSmall = document.getElementById("btnSizeSmall");
   var btnSizeLarge = document.getElementById("btnSizeLarge");
@@ -331,15 +323,13 @@
   function uid(){ return Math.random().toString(36).slice(2, 10); }
   function boardRect(){ return board.getBoundingClientRect(); }
 
-  // ---------- stato ----------
   var pops = [];   // {id,x,y,text,color,size,bold}
-  var links = [];  // {id,from,to,end:"arrow|none",shape:"straight|curve"}
+  var links = [];  // {id,from,to,end,shape,color}
   var selectedBoxId = null;
   var selectedLinkId = null;
   var linkingFrom = null;
   var moveMode = false;
 
-  // ---------- PAN + ZOOM (mobile + desktop) ----------
   var view = { x: 0, y: 0, s: 1 };
 
   function clampScale(s){
@@ -359,7 +349,6 @@
 
   applyView();
 
-  // Pointer tracking
   var pointers = new Map();
   var panState = null;
   var pinchState = null;
@@ -370,7 +359,6 @@
   }
 
   board.addEventListener("pointerdown", function(e){
-    // se tocchi un box, lascia gestire il drag del box (che fa stopPropagation)
     if (e.target.closest(".pop")) return;
 
     board.setPointerCapture(e.pointerId);
@@ -401,14 +389,12 @@
     if (!pointers.has(e.pointerId)) return;
     pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
 
-    // pinch
     if (pinchState && pointers.size >= 2){
       var arr = Array.from(pointers.values());
       var pA = arr[0], pB = arr[1];
       var d = dist(pA,pB);
       view.s = clampScale(pinchState.startS * (d / pinchState.startD));
 
-      // mantieni fisso il punto sotto alle dita
       var br = board.getBoundingClientRect();
       var midSx = pinchState.midScreen.x - br.left;
       var midSy = pinchState.midScreen.y - br.top;
@@ -421,7 +407,6 @@
       return;
     }
 
-    // pan
     if (panState && pointers.size === 1){
       view.x = panState.startX + (e.clientX - panState.p0.x);
       view.y = panState.startY + (e.clientY - panState.p0.y);
@@ -444,7 +429,6 @@
     pinchState = null;
   });
 
-  // zoom con CTRL + rotellina (desktop)
   board.addEventListener("wheel", function(e){
     if (!e.ctrlKey) return;
     e.preventDefault();
@@ -483,8 +467,7 @@
     renderLinks();
   }
 
-  // --- opzioni collegamento (scelte al momento dell'attivazione di "Collega") ---
-  var linkPreset = { end: "arrow", shape: "straight" }; // default
+  var linkPreset = { end: "arrow", shape: "straight" };
   var linkModal = null;
 
   function ensureLinkModal() {
@@ -495,17 +478,14 @@
     linkModal.innerHTML =
       '<div class="modal" role="dialog" aria-modal="true">' +
         '<h3>Opzioni collegamento</h3>' +
-
         '<div class="row">' +
           '<label><input type="radio" name="linkEnd" value="none"> Linea semplice</label>' +
           '<label><input type="radio" name="linkEnd" value="arrow"> Freccia</label>' +
         '</div>' +
-
         '<div class="row">' +
           '<label><input type="radio" name="linkShape" value="straight"> Retta</label>' +
           '<label><input type="radio" name="linkShape" value="curve"> Curva</label>' +
         '</div>' +
-
         '<div class="actions">' +
           '<button class="btn" id="linkOptCancel">Annulla</button>' +
           '<button class="btn" id="linkOptOk">OK</button>' +
@@ -518,7 +498,6 @@
   function openLinkOptions(done) {
     ensureLinkModal();
 
-    // pre-seleziona valori correnti
     var endRadio = linkModal.querySelector('input[name="linkEnd"][value="' + linkPreset.end + '"]');
     var shapeRadio = linkModal.querySelector('input[name="linkShape"][value="' + linkPreset.shape + '"]');
     if (endRadio) endRadio.checked = true;
@@ -549,7 +528,6 @@
       done(false);
     };
 
-    // click fuori dal box = annulla
     linkModal.onclick = function (e) {
       if (e.target === linkModal) {
         close();
@@ -581,7 +559,6 @@
     btnSizeLarge.disabled = false;
     btnBold.disabled = false;
 
-    // default se mancano (vecchie mappe)
     if (!p.color) p.color = "#000000";
     if (!p.size) p.size = "small";
     if (typeof p.bold === "undefined") p.bold = false;
@@ -645,7 +622,6 @@
       if (moveMode) setMoveMode(false);
       if (!selectedBoxId) { setStatus("Seleziona un box prima di collegare."); return; }
 
-      // popup opzioni (freccia/linea, retta/curva)
       openLinkOptions(function (ok) {
         if (!ok) { setStatus("Collegamento annullato."); return; }
 
@@ -672,7 +648,6 @@
     moveMode = !!on;
 
     if (moveMode) {
-      // se attivo sposta: disattivo collega
       setLinkMode(false);
       btnMove.classList.add("active");
       setStatus("Modalita sposta: trascina i box.");
@@ -681,7 +656,6 @@
       setStatus("Pronto");
     }
 
-    // quando sposta è attivo, blocchiamo l'editing del testo
     var tas = document.querySelectorAll(".pop .body");
     for (var i = 0; i < tas.length; i++) {
       tas[i].readOnly = moveMode;
@@ -706,7 +680,10 @@
       if (links[i].from === from && links[i].to === to) return;
     }
     var p = preset || linkPreset || { end:"arrow", shape:"straight" };
-    links.push({ id: uid(), from: from, to: to, end: p.end, shape: p.shape });
+    var color = "#000000";
+    var fromPop = pops.find(function(pp){ return pp.id === from; });
+    if (fromPop && fromPop.color) color = fromPop.color;
+    links.push({ id: uid(), from: from, to: to, end: p.end, shape: p.shape, color: color });
   }
 
   function deleteSelected() {
@@ -734,7 +711,6 @@
     var el = document.querySelector('.pop[data-id="'+id+'"]');
     if (!el) return null;
 
-    // offsetLeft/Top sono in coordinate "mondo" (NON influenzate da transform)
     var x = el.offsetLeft;
     var y = el.offsetTop;
     var w = el.offsetWidth;
@@ -787,21 +763,21 @@
       var p1 = edgePoint(A.cx, A.cy, A.hw, A.hh, dx, dy);
       var p2 = edgePoint(B.cx, B.cy, B.hw, B.hh, -dx, -dy);
 
-      var end = l.end || "arrow";       // compatibilità con vecchi file importati
+      var end = l.end || "arrow";
       var shape = l.shape || "straight";
+      var color = l.color || "#000000";
 
       var elWire;
 
       if (shape === "curve") {
-        // curva: uso un path con Quadratic Bezier
         var mx = (p1.x + p2.x) / 2;
         var my = (p1.y + p2.y) / 2;
 
         var len = Math.hypot(dx, dy) || 1;
-        var nx = -dy / len;   // normale (perpendicolare)
+        var nx = -dy / len;
         var ny =  dx / len;
 
-        var offset = Math.min(70, Math.max(20, len / 4));// “quanto” curva
+        var offset = Math.min(70, Math.max(20, len / 4));
         var cx = mx + nx * offset;
         var cy = my + ny * offset;
 
@@ -809,7 +785,6 @@
         elWire.setAttribute("fill", "none");
         elWire.setAttribute("d", "M " + p1.x + " " + p1.y + " Q " + cx + " " + cy + " " + p2.x + " " + p2.y);
       } else {
-        // retta: line
         elWire = document.createElementNS(NS, "line");
         elWire.setAttribute("x1", p1.x);
         elWire.setAttribute("y1", p1.y);
@@ -823,6 +798,7 @@
 
       elWire.classList.add("linkLine");
       elWire.dataset.linkid = l.id;
+      elWire.style.stroke = color;
 
       if (l.id === selectedLinkId) elWire.classList.add("selected");
 
@@ -848,7 +824,6 @@
     if (ghost) ghost.style.display = pops.length ? "none" : "flex";
 
     pops.forEach(function (p) {
-      // default per compatibilità vecchie mappe
       if (!p.color) p.color = "#000000";
       if (!p.size) p.size = "small";
       if (typeof p.bold === "undefined") p.bold = false;
@@ -859,11 +834,13 @@
       el.style.left = p.x + "px";
       el.style.top  = p.y + "px";
 
+      // bordo coordinato al colore del testo
+      el.style.borderColor = p.color || "#000000";
+
       el.innerHTML = '<textarea class="body" spellcheck="false"></textarea>';
       var ta = el.querySelector(".body");
       ta.value = p.text || "";
 
-      // applica stile testo
       var fontSizePx = (p.size === "large") ? "20px" : "14px";
       ta.style.fontSize = fontSizePx;
       ta.style.fontWeight = p.bold ? "700" : "400";
@@ -886,7 +863,6 @@
         renderLinks();
       });
 
-      // click ovunque nel box: se in modalita collega, crea link
       el.addEventListener("click", function () {
         if (linkingFrom && linkingFrom !== p.id) {
           addLink(linkingFrom, p.id, linkPreset);
@@ -896,17 +872,13 @@
         }
       });
 
-      // drag solo fuori textarea
       var dragging = false, sx=0, sy=0, ox=0, oy=0;
 
       el.addEventListener("pointerdown", function (e) {
-        // Su touch spesso e.button non è 0: quindi non blocchiamo
         if (e.pointerType === "mouse" && e.button !== 0) return;
-
-        // Se NON siamo in modalita sposta e sto toccando la textarea, non trascinare
         if (!moveMode && e.target && e.target.tagName && e.target.tagName.toLowerCase() === "textarea") return;
 
-        e.preventDefault();     // evita scroll/zoom mentre trascini
+        e.preventDefault();
         e.stopPropagation();
 
         setLinkMode(false);
@@ -916,7 +888,6 @@
         sx = e.clientX; sy = e.clientY;
         ox = p.x; oy = p.y;
 
-        // cattura il puntatore: fondamentale su mobile
         if (el.setPointerCapture) el.setPointerCapture(e.pointerId);
 
         function onMove(ev) {
@@ -947,9 +918,8 @@
     updateTextControls();
   }
 
-  // ---------- export/import/pdf ----------
   function getState() {
-    return { version: 1, createdAt: new Date().toISOString(), pops: pops, links: links };
+    return { version: 2, createdAt: new Date().toISOString(), pops: pops, links: links };
   }
 
   function downloadBlob(name, blob) {
@@ -999,12 +969,10 @@
   function parseImportedText(text) {
     var t = (text || "").trim();
 
-    // Caso 1: JSON puro
     if (t.charAt(0) === "{" || t.charAt(0) === "[") {
       return JSON.parse(t);
     }
 
-    // Caso 2: HTML esportato (textarea nascosta)
     var re = /<textarea[^>]*id=["']popplet_export_data["'][^>]*>([\s\S]*?)<\/textarea>/i;
     var m = text.match(re);
     if (!m) throw new Error("File non riconosciuto");
@@ -1014,8 +982,15 @@
 
   function applyState(state) {
     if (!state || !state.pops || !state.links) throw new Error("Dati incompleti");
+
     pops = state.pops;
     links = state.links;
+
+    // compatibilità vecchie mappe: assicura un colore per ogni link
+    links.forEach(function(l){
+      if (!l.color) l.color = "#000000";
+    });
+
     clearSelections();
     setLinkMode(false);
     render();
@@ -1045,7 +1020,6 @@
     window.print();
   }
 
-  // ---------- eventi ----------
   board.addEventListener("mousedown", function (e) {
     if (e.target === board) {
       clearSelections();
@@ -1072,7 +1046,6 @@
     if (key === "escape") setLinkMode(false);
   });
 
-  // ---------- bottoni ----------
   btnNew.addEventListener("click", function () {
     var r = boardRect();
     createPop(20 + Math.random()*(r.width-260), 20 + Math.random()*(r.height-160));
@@ -1088,14 +1061,26 @@
   btnZoomIn.addEventListener("click", function(){ zoomAroundCenter(1.15); });
   btnZoomOut.addEventListener("click", function(){ zoomAroundCenter(1/1.15); });
 
-  // ---------- eventi controlli testo ----------
+  // controlli colore/dimensione/grassetto
   txtColor.addEventListener("input", function(){
     if (!selectedBoxId) return;
     var p = pops.find(function(pp){ return pp.id === selectedBoxId; });
     if (!p) return;
     p.color = txtColor.value || "#000000";
+
     var ta = document.querySelector('.pop[data-id="'+p.id+'"] .body');
     if (ta) ta.style.color = p.color;
+
+    var boxEl = document.querySelector('.pop[data-id="'+p.id+'"]');
+    if (boxEl) boxEl.style.borderColor = p.color;
+
+    // aggiorna colore frecce collegate a questo box
+    links.forEach(function(l){
+      if (l.from === p.id || l.to === p.id) {
+        l.color = p.color;
+      }
+    });
+    renderLinks();
   });
 
   btnSizeSmall.addEventListener("click", function(){
@@ -1128,7 +1113,6 @@
     updateTextControls();
   });
 
-  // ---------- init ----------
   render();
   setStatus("Pronto");
 })();
